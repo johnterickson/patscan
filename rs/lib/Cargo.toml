@@ -1,11 +1,11 @@
 [package]
-name = "patscan"
+name = "patscan-lib"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+crate-type = ["rlib","dylib"]
 
 [dependencies]
 lazy_static = "1.4.0"
 rand = "0.8.5"
-
-[profile.release]
-debug = true

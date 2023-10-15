@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.002.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "c-sharp", "c-sharp", "{A6F2D20C-D602-42FF-BCE5-3481AA9D6D0F}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "patscan", "c-sharp\lib\patscan.csproj", "{027DC95F-A267-4C71-B83C-953912D907F3}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "patscan-test", "c-sharp\test\patscan-test.csproj", "{2396675E-A300-47B9-8C46-011A7F678B76}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{027DC95F-A267-4C71-B83C-953912D907F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{027DC95F-A267-4C71-B83C-953912D907F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{027DC95F-A267-4C71-B83C-953912D907F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{027DC95F-A267-4C71-B83C-953912D907F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2396675E-A300-47B9-8C46-011A7F678B76}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2396675E-A300-47B9-8C46-011A7F678B76}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2396675E-A300-47B9-8C46-011A7F678B76}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2396675E-A300-47B9-8C46-011A7F678B76}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{027DC95F-A267-4C71-B83C-953912D907F3} = {A6F2D20C-D602-42FF-BCE5-3481AA9D6D0F}
+		{2396675E-A300-47B9-8C46-011A7F678B76} = {A6F2D20C-D602-42FF-BCE5-3481AA9D6D0F}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BF14754B-D67A-42F9-8B90-CDC30C28C661}
+	EndGlobalSection
+EndGlobal

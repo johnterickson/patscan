@@ -1,8 +1,8 @@
 #![feature(portable_simd )]
 #![feature(test)]
-extern crate test;
 
-use std::io::{BufRead, BufReader};
+#[cfg(test)]
+extern crate test;
 
 const PAT_LEN: u8 = 52;
 
@@ -77,9 +77,18 @@ pub fn sisd(line: &str) -> Option<(usize, &str, usize)> {
     None
 }
 
+#[no_mangle]
+pub extern fn simd_c(str: *const u8, len: u32) -> u32 {
+    let line = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(str, len.try_into().unwrap())) };
+    println!("{}", line);
+    simd(line).map(|i| i.0.try_into().unwrap()).unwrap_or(u32::MAX)
+}
+
+
 pub fn simd(line: &str) -> Option<(usize, &str, usize)> {
     use std::simd::*;
 
+    println!("{}", line);
     assert!('0' < '9' && 'a' < 'z');
 
     const MATCH_LANES: usize = 8;
@@ -146,21 +155,6 @@ pub fn simd(line: &str) -> Option<(usize, &str, usize)> {
     let start_index = line.len() - std::cmp::min(remainder.len() + PAT_LEN as usize - 1, line.len());
     return sisd(&line[start_index..]).map(|i| (i.0 + start_index, i.1, i.2));
 }
-
-fn main() -> Result<(), std::io::Error> {
-    let stdin = BufReader::new(std::io::stdin().lock());
-    for line in stdin.lines() {
-        if let Some((start_index, substr, entropy)) = simd(&line?) {
-            println!("{} {} {}", start_index, substr, entropy);
-        }
-    }
-
-    Ok(())
-}
-
-// #![feature(test)]
-
-// extern crate test;
 
 #[cfg(test)]
 mod tests {
