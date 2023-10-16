@@ -21,5 +21,11 @@ jobs:
       with:
         toolchain: nightly
         override: true
-    - name: Build
-      run: .\build.bat
+    - name: Build rust
+      run: cd rs; cargo build --release
+    - name: benchmark rust
+      run: cd rs; cargo bench
+    - name: Build and test c#
+      run: cd c-sharp\test; dotnet test -l "console;verbosity=detailed"
+    - name: benchmark c#
+      run: cd c-sharp\bench; dotnet run -c Release
