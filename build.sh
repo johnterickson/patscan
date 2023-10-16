@@ -6,6 +6,7 @@ pushd rs
 cargo build --release
 cargo test
 cargo test --release
+cargo bench
 popd
 pushd c-sharp/test
 dotnet test -l "console;verbosity=detailed"

@@ -18,30 +18,37 @@ fn pat_char_index(c: u16) -> Option<u8> {
 }
 
 // pat ~ 20
-// hex ~ 10
-const PAT_ENTROPY_MINIMUM: usize = 15;
+// hex ~ 7
+const PAT_ENTROPY_MINIMUM: usize = 10;
 
 fn approx_entropy(char_counts: &[u8; PAT_CHARS]) -> usize {
-    // let is_hex = char_counts.iter().all(|c| *c < 16);
-    // if is_hex {
-    //     return false;
-    // }
+    // two measures:
+    // 1. frequency distribution
+    //    flatter distribution --> more random
+    // 2. lopsidedness (e.g. all hex will be very lopsided)
+    //    more lopsided --> less random
     let mut total = 0;
+    let mut weighted_total = 0;
     let mut sum_squared = 0;
-    for c in char_counts {
-        let c = *c as usize;
-        total += c;
-        sum_squared += c * c;
+    for (ch, count) in char_counts.iter().enumerate() {
+        let count = *count as usize;
+        total += count;
+        sum_squared += count * count;
+        weighted_total += ch*count;
     }
+    let average_char = weighted_total / total;
+    let lopsidedness = average_char.abs_diff(PAT_CHARS/2);
+    const LOPSIDEDNESS_SCALING_DIVISOR: usize = 2;
+    let lopsidedness = lopsidedness / LOPSIDEDNESS_SCALING_DIVISOR;
 
     let max = std::cmp::min(PAT_LEN as usize, total);
     let max = max * max;
 
     let normalized = max / sum_squared;
 
-    // dbg!(normalized);
+    // dbg!(normalized, lopsidedness);
 
-    normalized
+    normalized.saturating_sub(lopsidedness)
 }
 
 pub fn sisd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
@@ -188,11 +195,18 @@ mod tests {
 
     #[test]
     fn match_direct() {
-        let pat = random_pat();
-        let pat = pat.as_slice();
+        let pat_str = random_pat();
+        let pat = pat_str.as_slice();
     
-        assert_eq!(sisd(pat).map(|i| i.0), Some(0));
-        assert_eq!(simd(pat).map(|i| i.0), Some(0));
+        assert_eq!(sisd(pat).map(|i| i.0), Some(0), "{}", pat_str.to_string_lossy());
+        assert_eq!(simd(pat).map(|i| i.0), Some(0), "{}", pat_str.to_string_lossy());
+    }
+
+    #[test]
+    fn match_direct_lots() {
+        for _ in 0..1000 {
+            match_direct();
+        }
     }
 
     #[test]
@@ -209,11 +223,25 @@ mod tests {
     }
 
     #[test]
+    fn not_match_direct_lots() {
+        for _ in 0..1000 {
+            not_match_direct();
+        }
+    }
+
+    #[test]
     fn unlikely_pat() {
         let almost_pat = random_chars(&LOWER_HEX_CHARS, PAT_LEN as usize);
         let almost_pat = almost_pat.as_slice();
         assert_eq!(sisd(&almost_pat), None);
         assert_eq!(simd(&almost_pat), None);
+    }
+
+    #[test]
+    fn unlikely_pat_lots() {
+        for _ in 0..1000 {
+            unlikely_pat();
+        }
     }
 
     #[test]
