@@ -1,7 +1,7 @@
 #![feature(portable_simd )]
 #![feature(test)]
 
-use widestring::U16CString;
+use widestring::U16CStr;
 
 #[cfg(test)]
 extern crate test;
@@ -81,8 +81,8 @@ pub fn sisd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
 
 #[no_mangle]
 pub extern fn simd_c(str: *const u16, len: u32) -> u32 {
-    let line = unsafe { U16CString::from_ptr_unchecked(str, len.try_into().unwrap()) };
-    simd(line.as_slice()).map(|i| i.0.try_into().unwrap()).unwrap_or(u32::MAX)
+    let line = unsafe { U16CStr::from_ptr_unchecked(str, len as usize) };
+    simd(line.as_slice()).map(|i| i.0 as u32).unwrap_or(u32::MAX)
 }
 
 
