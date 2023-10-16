@@ -9,18 +9,21 @@ namespace PatScanBenchBenchmarks
 {
     public class PatScanBench
     {
-        private static readonly string PatInNonPatCharsTestString;
-        private static readonly string PatInPatCharsTestString;
+        private string PatInNonPatCharsTestString;
+        private string PatInPatCharsTestString;
 
+        [Params(1_000, 10_000, 100_000)]
+        public int N;
 
-        static PatScanBench()
+        [GlobalSetup]
+        public void Setup()
         {
-            PatInNonPatCharsTestString = 
-                PatScanTests.RandomChars(PatScanTests.Uppercase, 100_000)
+             PatInNonPatCharsTestString = 
+                PatScanTests.RandomChars(PatScanTests.Uppercase, N)
                 + PatScanTests.RandomPAT()
                 + PatScanTests.RandomChars(PatScanTests.Uppercase, 1_000);
             PatInPatCharsTestString = 
-                PatScanTests.RandomChars(PatScanTests.HexLower, 100_000)
+                PatScanTests.RandomChars(PatScanTests.HexLower, N)
                 + PatScanTests.RandomPAT()
                 + PatScanTests.RandomChars(PatScanTests.HexLower, 1_000);
         }
