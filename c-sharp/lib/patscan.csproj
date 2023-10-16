@@ -4,9 +4,16 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
+    <NativeDLL>patscan_rs.dll</NativeDLL>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
+    <NativeDLL>libpatscan_rs.so</NativeDLL>
+  </PropertyGroup>
+
    <ItemGroup>
     <Content 
-      Include="..\..\rs\target\release\patscan_lib.dll"
+      Include="../../rs/target/release/$(NativeDLL)"
       CopyToOutputDirectory="PreserveNewest"
     />
   </ItemGroup>

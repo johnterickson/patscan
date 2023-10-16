@@ -3,15 +3,24 @@
 namespace patscan;
 
 public static class PatScan {
-    [DllImport("patscan_lib.dll", CharSet = CharSet.Unicode)]
-    private unsafe static extern uint simd_c(char* str, uint strLen);
+    [DllImport("patscan_rs.dll", EntryPoint = "simd_c")]
+    private unsafe static extern uint simd_c_windows(char* str, uint strLen);
+    [DllImport("libpatscan_rs.so", EntryPoint = "simd_c")]
+    private unsafe static extern uint simd_c_linux(char* str, uint strLen);
 
     public unsafe static long call_simd(string str)
     {
         uint result;
         fixed (char* p = str)
         {
-            result = simd_c(p, (uint)str.Length);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                result = simd_c_windows(p, (uint)str.Length);
+            }
+            else
+            {
+                result = simd_c_linux(p, (uint)str.Length);
+            }
         }
         if (result == uint.MaxValue)
         {

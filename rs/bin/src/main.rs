@@ -1,6 +1,6 @@
 use std::io::{BufReader, BufRead};
 
-use patscan_lib::simd;
+use patscan_rs::simd;
 use widestring::{U16String, U16Str};
 
 
