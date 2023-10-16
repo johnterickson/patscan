@@ -1,16 +1,18 @@
 #![feature(portable_simd )]
 #![feature(test)]
 
+use widestring::U16CString;
+
 #[cfg(test)]
 extern crate test;
 
 const PAT_LEN: u8 = 52;
 
 const PAT_CHARS: usize = 10 + 26;
-fn pat_char_index(c: char) -> Option<u8> {
+fn pat_char_index(c: u16) -> Option<u8> {
     match c {
-        c if 'a' <= c && c <= 'z' => Some(c as u8 - 'a' as u8 + 10),
-        c if '0' <= c && c <= '9' => Some(c as u8 - '0' as u8),
+        c if 'a' as u16 <= c && c <= 'z' as u16 => Some((c - 'a' as u16 + 10) as u8),
+        c if '0' as u16 <= c && c <= '9' as u16 => Some((c - '0' as u16) as u8),
         _ => None
     }
 }
@@ -42,12 +44,12 @@ fn approx_entropy(char_counts: &[u8; PAT_CHARS]) -> usize {
     normalized
 }
 
-pub fn sisd(line: &str) -> Option<(usize, &str, usize)> {
+pub fn sisd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
     let mut possible_start_index = 0;
     let mut confirmed_length: u8 = 0;
     let mut char_counts = [0u8; PAT_CHARS];
-    for (i, c) in line.char_indices() {
-        if let Some(pat_char_index) = pat_char_index(c) {
+    for (i, c) in line.iter().enumerate() {
+        if let Some(pat_char_index) = pat_char_index(*c) {
             char_counts[pat_char_index as usize] += 1;
             confirmed_length += 1;
 
@@ -78,17 +80,16 @@ pub fn sisd(line: &str) -> Option<(usize, &str, usize)> {
 }
 
 #[no_mangle]
-pub extern fn simd_c(str: *const u8, len: u32) -> u32 {
-    let line = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(str, len.try_into().unwrap())) };
-    println!("{}", line);
-    simd(line).map(|i| i.0.try_into().unwrap()).unwrap_or(u32::MAX)
+pub extern fn simd_c(str: *const u16, len: u32) -> u32 {
+    let line = unsafe { U16CString::from_ptr_unchecked(str, len.try_into().unwrap()) };
+    simd(line.as_slice()).map(|i| i.0.try_into().unwrap()).unwrap_or(u32::MAX)
 }
 
 
-pub fn simd(line: &str) -> Option<(usize, &str, usize)> {
+pub fn simd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
     use std::simd::*;
 
-    println!("{}", line);
+    // println!("{}", line);
     assert!('0' < '9' && 'a' < 'z');
 
     const MATCH_LANES: usize = 8;
@@ -104,22 +105,22 @@ pub fn simd(line: &str) -> Option<(usize, &str, usize)> {
     let mut confirmed_blocks: u8 = 0;
     // let mut char_counts: Simd<_,FREQ_BUCKETS> = Simd::splat(0u8);
     let mut char_counts = [0u8; PAT_CHARS];
-    let mut char_blocks = line.as_bytes().chunks_exact(MATCH_LANES);
+    let mut char_blocks = line.chunks_exact(MATCH_LANES);
     while let Some(chunk_slice) = char_blocks.next() {
 
         let chunk: Simd<_,MATCH_LANES> = Simd::from_slice(chunk_slice);
-        let number = chunk.simd_ge(Simd::splat('0' as u8)) & chunk.simd_le(Simd::splat('9' as u8));
-        let lowercase = chunk.simd_ge(Simd::splat('a' as u8)) & chunk.simd_le(Simd::splat('z' as u8));
+        let number = chunk.simd_ge(Simd::splat('0' as u16)) & chunk.simd_le(Simd::splat('9' as u16));
+        let lowercase = chunk.simd_ge(Simd::splat('a' as u16)) & chunk.simd_le(Simd::splat('z' as u16));
         
         if (number | lowercase).all() {
 
             confirmed_blocks += 1;
 
             let number_index = number.select(
-                chunk - Simd::splat('0' as u8),
+                chunk - Simd::splat('0' as u16),
                 Simd::splat(0));
             let lowercase_index = lowercase.select(
-                chunk - Simd::splat('a' as u8) + Simd::splat(10u8),
+                chunk - Simd::splat('a' as u16) + Simd::splat(10u16),
                 Simd::splat(0));
             let char_index = number_index | lowercase_index;
 
@@ -162,6 +163,7 @@ mod tests {
     use rand::Rng;
     use test::Bencher;
     use lazy_static::lazy_static;
+    use widestring::U16String;
 
     lazy_static! {
         static ref PAT_CHARS: Vec<char> = ('0'..='9').chain('a'..='z').collect();
@@ -171,15 +173,15 @@ mod tests {
         static ref NUMBERS: Vec<char> = ('0'..='9').collect();
     }
 
-    fn random_pat() -> String {
+    fn random_pat() -> U16String {
         random_chars(&PAT_CHARS, PAT_LEN as usize)
     }
 
-    fn random_chars(chars: &[char], count: usize) -> String {
+    fn random_chars(chars: &[char], count: usize) -> U16String {
         let mut rng = rand::thread_rng();
-        let mut pat = String::with_capacity(count);
+        let mut pat = U16String::with_capacity(count);
         for _ in 0..count {
-            pat.push(chars[rng.gen_range(0..chars.len())]);
+            pat.push_char(chars[rng.gen_range(0..chars.len())]);
         }
         pat
     }
@@ -187,16 +189,21 @@ mod tests {
     #[test]
     fn match_direct() {
         let pat = random_pat();
-        assert_eq!(sisd(&pat).map(|i| i.0), Some(0));
-        assert_eq!(simd(&pat).map(|i| i.0), Some(0));
+        let pat = pat.as_slice();
+    
+        assert_eq!(sisd(pat).map(|i| i.0), Some(0));
+        assert_eq!(simd(pat).map(|i| i.0), Some(0));
     }
 
     #[test]
     fn not_match_direct() {
         let pat = random_pat();
-        let mut chars = pat.chars().collect::<Vec<_>>();
+        
+        let mut chars = pat.chars().map(|c| c.unwrap()).collect::<Vec<_>>();
         chars[PAT_LEN as usize/2] = '$';
-        let not_pat = String::from_iter(&chars);
+        let not_pat = U16String::from_iter(&chars);
+        let not_pat = not_pat.as_slice();
+
         assert_eq!(sisd(&not_pat), None);
         assert_eq!(simd(&not_pat), None);
     }
@@ -204,6 +211,7 @@ mod tests {
     #[test]
     fn unlikely_pat() {
         let almost_pat = random_chars(&LOWER_HEX_CHARS, PAT_LEN as usize);
+        let almost_pat = almost_pat.as_slice();
         assert_eq!(sisd(&almost_pat), None);
         assert_eq!(simd(&almost_pat), None);
     }
@@ -211,7 +219,7 @@ mod tests {
     #[test]
     fn long_not_pat() {
         let line = random_chars(&NOT_PAT_CHARS, 10000000);
-        let line = line.as_str();
+        let line = line.as_slice();
         assert_eq!(sisd(&line), None);
         assert_eq!(simd(&line), None);
     }
@@ -219,8 +227,10 @@ mod tests {
     #[test]
     fn long_hidden_in_not() {
         let pat = random_pat();
-        let line = random_chars(&NOT_PAT_CHARS, 10_000) + &pat + &random_chars(&NOT_PAT_CHARS, 100);
-        let line = &line;
+        let mut line = random_chars(&NOT_PAT_CHARS, 10_000);
+        line.push(&pat);
+        line.push(random_chars(&NOT_PAT_CHARS, 100));
+        let line = line.as_slice();
 
         // assert_eq!(sisd(&line).iter().next().map(|i| i.0), Some(10000));
         assert_eq!(simd(&line).iter().next().map(|i| i.0), Some(10000));
@@ -229,8 +239,10 @@ mod tests {
     #[test]
     fn long_hidden_in_hex() {
         let pat = random_pat();
-        let line = random_chars(&LOWER_HEX_CHARS, 10_000) + &pat + &random_chars(&LOWER_HEX_CHARS, 100);
-        let line = &line;
+        let mut line = random_chars(&LOWER_HEX_CHARS, 10_000);
+        line.push(&pat);
+        line.push(random_chars(&LOWER_HEX_CHARS, 100));
+        let line = line.as_slice();
 
         let found = sisd(&line).iter().next().unwrap().0;
         assert!(found.abs_diff(10000) < PAT_LEN.into(), "{}", found);
@@ -241,7 +253,7 @@ mod tests {
     #[bench]
     fn bench_sisd_none(b: &mut Bencher) {
         let line = random_chars(&NOT_PAT_CHARS, 100_000);
-        let line = line.as_str();
+        let line = line.as_slice();
         test::black_box(line);
 
         b.iter(|| {
@@ -255,7 +267,7 @@ mod tests {
     #[bench]
     fn bench_simd_none(b: &mut Bencher) {
         let line = random_chars(&NOT_PAT_CHARS, 100_000);
-        let line = line.as_str();
+        let line = line.as_slice();
         test::black_box(line);
 
         b.iter(|| {
@@ -269,8 +281,10 @@ mod tests {
     #[bench]
     fn bench_sisd_hidden_in_hex(b: &mut Bencher) {
         let pat = random_pat();
-        let line = random_chars(&LOWER_HEX_CHARS, 100_000) + &pat + &random_chars(&LOWER_HEX_CHARS, 1000);
-        let line = &line;
+        let mut line = random_chars(&LOWER_HEX_CHARS, 100_000);
+        line.push(&pat);
+        line.push(random_chars(&LOWER_HEX_CHARS, 1000));
+        let line = line.as_slice();
 
         b.iter(|| {
             // Inner closure, the actual test
@@ -286,8 +300,10 @@ mod tests {
     #[bench]
     fn bench_simd_hidden_in_hex(b: &mut Bencher) {
         let pat = random_pat();
-        let line = random_chars(&LOWER_HEX_CHARS, 100_000) + &pat + &random_chars(&LOWER_HEX_CHARS, 1000);
-        let line = &line;
+        let mut line = random_chars(&LOWER_HEX_CHARS, 100_000);
+        line.push(&pat);
+        line.push(random_chars(&LOWER_HEX_CHARS, 1000));
+        let line = line.as_slice();
 
         b.iter(|| {
             // Inner closure, the actual test

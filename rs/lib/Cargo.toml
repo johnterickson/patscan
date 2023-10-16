@@ -9,3 +9,4 @@ crate-type = ["rlib","dylib"]
 [dependencies]
 lazy_static = "1.4.0"
 rand = "0.8.5"
+widestring = "1.0.2"

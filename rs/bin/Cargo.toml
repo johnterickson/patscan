@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 patscan-lib = { path = "../lib"}
+widestring = "1.0.2"
