@@ -7,7 +7,6 @@ use widestring::U16CStr;
 extern crate test;
 
 const PAT_LEN: u8 = 52;
-
 const PAT_CHARS: usize = 10 + 26;
 fn pat_char_index(c: u16) -> Option<u8> {
     match c {
@@ -17,46 +16,55 @@ fn pat_char_index(c: u16) -> Option<u8> {
     }
 }
 
-// pat ~ 20
-// hex ~ 7
-const PAT_ENTROPY_MINIMUM: usize = 10;
+const FREQ_COMPRESSION: u8 = 1;
+const FREQ_BUCKETS: usize = (PAT_CHARS + FREQ_COMPRESSION as usize - 1)  / (FREQ_COMPRESSION as usize);
+const EXPECTED_AVERAGE_CHAR: usize = (
+    ( (FREQ_BUCKETS - 1) / 2 * FREQ_COMPRESSION as usize) +
+    ( (FREQ_BUCKETS + 0) / 2 * FREQ_COMPRESSION as usize)
+) / 2;
+const NORMALIZED_SCALING_MULTIPLE: usize = 1;
+const LOPSIDEDNESS_SCALING_DIVISOR: usize = 1;
 
-fn approx_entropy(char_counts: &[u8; PAT_CHARS]) -> usize {
+// pat ~ 22 - 1 = 21
+// hex ~ 10 - 8 = 2
+// every_nth ~ 8 - 1 = 7
+const PAT_ENTROPY_MINIMUM: usize = 8;
+
+fn approx_entropy(char_counts: &[u8; FREQ_BUCKETS]) -> usize {
     // two measures:
     // 1. frequency distribution
     //    flatter distribution --> more random
     // 2. lopsidedness (e.g. all hex will be very lopsided)
     //    more lopsided --> less random
-    let mut total = 0;
+    let mut total_count = 0;
     let mut weighted_total = 0;
     let mut sum_squared = 0;
     for (ch, count) in char_counts.iter().enumerate() {
         let count = *count as usize;
-        total += count;
+        total_count += count;
         sum_squared += count * count;
-        weighted_total += ch*count;
+        weighted_total += ch * FREQ_COMPRESSION as usize * count;
     }
-    let average_char = weighted_total / total;
-    let lopsidedness = average_char.abs_diff(PAT_CHARS/2);
-    const LOPSIDEDNESS_SCALING_DIVISOR: usize = 2;
+    let max = std::cmp::min(PAT_LEN as usize, total_count);
+    let max = max * max;
+    let normalized = max * NORMALIZED_SCALING_MULTIPLE / sum_squared;
+
+    let average_char = weighted_total / total_count;
+    let lopsidedness = average_char.abs_diff(EXPECTED_AVERAGE_CHAR);
     let lopsidedness = lopsidedness / LOPSIDEDNESS_SCALING_DIVISOR;
 
-    let max = std::cmp::min(PAT_LEN as usize, total);
-    let max = max * max;
-
-    let normalized = max / sum_squared;
-
-    // dbg!(normalized, lopsidedness);
-
-    normalized.saturating_sub(lopsidedness)
+    let merged = normalized.saturating_sub(lopsidedness);
+    // dbg!(char_counts, max, sum_squared, normalized, average_char, lopsidedness, merged);
+    merged
 }
 
 pub fn sisd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
     let mut possible_start_index = 0;
     let mut confirmed_length: u8 = 0;
-    let mut char_counts = [0u8; PAT_CHARS];
+    let mut char_counts = [0u8; FREQ_BUCKETS];
     for (i, c) in line.iter().enumerate() {
         if let Some(pat_char_index) = pat_char_index(*c) {
+            let pat_char_index = pat_char_index / FREQ_COMPRESSION;
             char_counts[pat_char_index as usize] += 1;
             confirmed_length += 1;
 
@@ -65,7 +73,7 @@ pub fn sisd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
             }
 
             let entropy = approx_entropy(&char_counts);
-            if entropy > PAT_ENTROPY_MINIMUM  {
+            if entropy >= PAT_ENTROPY_MINIMUM  {
                 let start_index = possible_start_index;
                 let end_index = possible_start_index + PAT_LEN as usize;
                 let substr = &line[start_index..end_index];
@@ -106,12 +114,9 @@ pub fn simd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
     const BLOCKS_TO_MATCH: u8 = ((PAT_LEN as usize - MIGHT_MISS_BEFORE - MIGHT_MISS_AFTER) / MATCH_LANES) as u8;
     const _CHECK_FOR_ZERO: u8 = 1 / BLOCKS_TO_MATCH;
 
-    // const FREQ_BUCKETS: usize = 64;//PAT_CHARS_MAX_INDEX as usize + 1;
-
     let mut possible_start_block_index: usize = 0;
     let mut confirmed_blocks: u8 = 0;
-    // let mut char_counts: Simd<_,FREQ_BUCKETS> = Simd::splat(0u8);
-    let mut char_counts = [0u8; PAT_CHARS];
+    let mut char_counts = [0u8; FREQ_BUCKETS];
     let mut char_blocks = line.chunks_exact(MATCH_LANES);
     while let Some(chunk_slice) = char_blocks.next() {
 
@@ -130,6 +135,7 @@ pub fn simd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
                 chunk - Simd::splat('a' as u16) + Simd::splat(10u16),
                 Simd::splat(0));
             let char_index = number_index | lowercase_index;
+            let char_index = char_index / Simd::splat(FREQ_COMPRESSION as u16);
 
             // todo: simd this
             for char_index in char_index.as_array() {
@@ -138,7 +144,7 @@ pub fn simd(line: &[u16]) -> Option<(usize, &[u16], usize)> {
 
             if confirmed_blocks == BLOCKS_TO_MATCH {
                 let entropy = approx_entropy(&char_counts);
-                if entropy > PAT_ENTROPY_MINIMUM  {
+                if entropy >= PAT_ENTROPY_MINIMUM  {
                     let start_index = (std::cmp::max(possible_start_block_index, 1) - 1) * MATCH_LANES;
                     let end_index = std::cmp::min(start_index + 2 * PAT_LEN as usize, line.len());
                     let substr = &line[start_index .. end_index];
@@ -171,9 +177,19 @@ mod tests {
     use test::Bencher;
     use lazy_static::lazy_static;
     use widestring::U16String;
+    
+    // Lower numbers cause tests to fail as unlucky PATs overlap with lucky not-PATs
+    const NTH: u8 = 5;
+
+    #[cfg(debug_assertions)]
+    const LOTS: usize = 1_000;
+
+    #[cfg(not(debug_assertions))]
+    const LOTS: usize = 100_000;
 
     lazy_static! {
         static ref PAT_CHARS: Vec<char> = ('0'..='9').chain('a'..='z').collect();
+        static ref EVERY_NTH_PAT_CHARS: Vec<char> = ('0'..='9').chain('a'..='z').filter(|c| *c as u8 % NTH == 0).collect();
         static ref LOWER_HEX_CHARS: Vec<char> = ('0'..='9').chain('a'..='f').collect();
         static ref NOT_PAT_CHARS: Vec<char> = ('A'..='Z').collect();
         static ref TEST_CHARS: Vec<char> = ('0'..='9').chain('a'..='z').chain('A'..='Z').collect();
@@ -204,7 +220,7 @@ mod tests {
 
     #[test]
     fn match_direct_lots() {
-        for _ in 0..1000 {
+        for _ in 0..LOTS {
             match_direct();
         }
     }
@@ -224,13 +240,13 @@ mod tests {
 
     #[test]
     fn not_match_direct_lots() {
-        for _ in 0..1000 {
+        for _ in 0..LOTS {
             not_match_direct();
         }
     }
 
     #[test]
-    fn unlikely_pat() {
+    fn unlikely_pat_hex() {
         let almost_pat = random_chars(&LOWER_HEX_CHARS, PAT_LEN as usize);
         let almost_pat = almost_pat.as_slice();
         assert_eq!(sisd(&almost_pat), None);
@@ -238,9 +254,24 @@ mod tests {
     }
 
     #[test]
-    fn unlikely_pat_lots() {
-        for _ in 0..1000 {
-            unlikely_pat();
+    fn unlikely_pat_hex_lots() {
+        for _ in 0..LOTS {
+            unlikely_pat_hex();
+        }
+    }
+
+    #[test]
+    fn unlikely_pat_every_nth() {
+        let almost_pat = random_chars(&EVERY_NTH_PAT_CHARS, PAT_LEN as usize);
+        let almost_pat = almost_pat.as_slice();
+        assert_eq!(sisd(&almost_pat), None);
+        assert_eq!(simd(&almost_pat), None);
+    }
+
+    #[test]
+    fn unlikely_pat_every_nth_lots() {
+        for _ in 0..LOTS {
+            unlikely_pat_every_nth();
         }
     }
 
